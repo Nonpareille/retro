@@ -2,9 +2,15 @@
 
 #include <SDL2/SDL.h>
 
+// TODO: put these elsewhere
 #define bool int
 #define false 0
 #define true 1
+#define min(x, y) ((x) < (y)) ? (x) : (y)
+#define max(x, y) ((x) < (y)) ? (y) : (x)
+
+// TODO: no floating point
+const float viewport_ratio = 320.f/224.f;
 
 int main(int arg_c, char *arg_v[])
 {
@@ -21,7 +27,7 @@ int main(int arg_c, char *arg_v[])
   } device; {
     device.window = SDL_CreateWindow("retro engine demo",
                               SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                              1024, 1024, SDL_WINDOW_SHOWN);
+                              512, 224, SDL_WINDOW_SHOWN);
     if (!device.window)
     {
       // handle error
@@ -30,6 +36,17 @@ int main(int arg_c, char *arg_v[])
     }
 
     device.surface = SDL_GetWindowSurface(device.window);
+    SDL_FillRect(device.surface, NULL, SDL_MapRGB(device.surface->format, 0x00, 0x00, 0x00));
+
+    int clip_width = device.surface->h * viewport_ratio;
+    int clip_height = device.surface->w * 1.f / viewport_ratio;
+    SDL_Rect clip_rect = {
+      max(0, (device.surface->w - clip_width) / 2), // x
+      max(0, (device.surface->h - clip_height) / 2), // y
+      min(device.surface->w, clip_width), // w
+      min(device.surface->h, clip_height) // h
+    };
+    SDL_SetClipRect(device.surface, &clip_rect);
   }
 
   SDL_Event event;
@@ -40,6 +57,8 @@ int main(int arg_c, char *arg_v[])
       case SDL_QUIT: {
         quit = true;
       } break;
+      case SDL_KEYDOWN: {
+      }
       }
     }
 
