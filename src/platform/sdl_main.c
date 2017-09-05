@@ -1,16 +1,39 @@
 // "Portable" platform entry point using SDL and the standard C library.
 
 #include <SDL2/SDL.h>
+#include "../../test.h"
 
 // TODO: put these elsewhere
 #define bool int
 #define false 0
 #define true 1
-#define min(x, y) ((x) < (y)) ? (x) : (y)
-#define max(x, y) ((x) < (y)) ? (y) : (x)
+#define min(x, y) (((x) < (y)) ? (x) : (y))
+#define max(x, y) (((x) < (y)) ? (y) : (x))
+typedef uint8_t byte;
+#define kb(x) ((size_t)(x) * 1024)
+#define mb(x) (kb(x) * 1024)
+#define gb(x) (mb(x) * 1024)
 
 // TODO: no floating point
 const float viewport_ratio = 320.f/224.f;
+
+typedef enum ControllerState {
+  Button_A        = 1 << 0,
+  Button_X        = 1 << 1,
+  Button_L        = 1 << 2,
+  Button_R        = 1 << 3,
+  Button_B        = 1 << 4,
+  Button_Y        = 1 << 5,
+  Button_Start    = 1 << 6,
+  Button_Select   = 1 << 7,
+  Direction_Up    = 1 << 8,
+  Direction_Down  = 1 << 9,
+  Direction_Left  = 1 << 10,
+  Direction_Right = 1 << 11,
+  State_Active    = 1 << 15,
+
+  CLEAR_STATE     = 0x1000
+} ControllerState;
 
 typedef struct Device {
   SDL_Window *window;
@@ -64,7 +87,7 @@ int main(int arg_c, char *arg_v[])
   Device device; {
     device.window = SDL_CreateWindow("retro engine demo",
                               SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                              512, 224, SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE);
+                              700, 550, SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE);
     if (!device.window)
     {
       // handle error
@@ -79,6 +102,21 @@ int main(int arg_c, char *arg_v[])
     SDL_SetClipRect(device.surface, &clip_rect);
   }
 
+  struct {
+    byte video_ram[mb(1)];
+    uint16_t controllers[4]; // ControllerState
+    //TODO: tile map layers
+    //TODO: palette
+    //TODO: object attribute memory
+    //TODO: scroll registers
+    //TODO: mode 7 registers
+    //TODO: fixed point multiplication/division results
+    //TODO: "interrupt" function pointers
+  } registers = {};
+
+
+  memcpy(registers.video_ram, data_test_bmp, data_test_bmp_len);
+
   SDL_Event event;
   uint8_t r = 0;
   uint8_t g = 0;
@@ -87,6 +125,11 @@ int main(int arg_c, char *arg_v[])
   uint64_t freq = SDL_GetPerformanceFrequency();
   uint64_t now, last = SDL_GetPerformanceCounter();
   while (quit == false) {
+    // clear the frame state
+    for (int i = 0; i < 4; ++i) {
+      registers.controllers[i] &= CLEAR_STATE;
+    }
+
     while (SDL_PollEvent(&event)) {
       switch (event.type) {
         case SDL_QUIT: {
@@ -100,13 +143,38 @@ int main(int arg_c, char *arg_v[])
           }
         } break;
         case SDL_KEYDOWN: {
-
+          static int keyboard_player = -1;
+          // ControllerState controller = handleControllerEvent(KeyControllerMap(event.key));
+          // if (keyboard_active == -1) {
+          //   for (int i = 0; i < 4; ++i) {
+          //     if (registers.controllers[i] & ControllerState::State_Active == 0) {
+          //       keyboard_player = i;
+          //       break;
+          //     }
+          //   }
+          // }
+          // registers.controllers[keyboard_player] |= controller;
         } break;
       }
     }
 
     // renderer will go here
-    SDL_FillRect(device.surface, NULL, SDL_MapRGB(device.surface->format, r++, g+=2, b+=3));
+    int pixel_off_x = device.surface->clip_rect.x + (device.surface->clip_rect.w % 320) / 2;
+    int pixel_off_y = device.surface->clip_rect.y + (device.surface->clip_rect.h % 224) / 2;
+    int pixel_width = device.surface->clip_rect.w / 320;
+    int pixel_height = device.surface->clip_rect.h / 224;
+    for (int i = 0; i < 320*224; ++i)
+    {
+      SDL_Rect pixel = {
+        pixel_off_x + (pixel_width * (i % 320)),
+        pixel_off_y + (pixel_height * (224 - (i / 320))),
+        pixel_width, pixel_height
+      };
+      r = registers.video_ram[(i*3)+2];
+      g = registers.video_ram[(i*3)+1];
+      b = registers.video_ram[(i*3)+0];
+      SDL_FillRect(device.surface, &pixel, SDL_MapRGB(device.surface->format, r, g, b));
+    }
     SDL_UpdateWindowSurface(device.window);
 
     // for now we estimate a "frame rate" by just waiting some milliseconds.
